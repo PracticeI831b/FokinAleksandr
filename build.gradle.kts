@@ -12,14 +12,16 @@ version = "1.0-SNAPSHOT"
 repositories {
     mavenCentral()
     maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+    maven("https://jitpack.io")
     google()
 }
 
 dependencies {
-    // Note, if you develop a library, you should use compose.desktop.common.
-    // compose.desktop.currentOs should be used in launcher-sourceSet
-    // (in a separate module for demo project and in testMain).
-    // With compose.desktop.common you will also lose @Preview functionality
+    implementation("org.jetbrains.lets-plot:lets-plot-common:4.6.0")
+    implementation("org.jetbrains.lets-plot:lets-plot-compose:2.2.1")
+    implementation("org.jetbrains.lets-plot:lets-plot-kotlin-jvm:4.10.0")
+    implementation("org.jetbrains.lets-plot:platf-awt:4.6.2")
+    implementation("org.slf4j:slf4j-simple:2.0.12")
     implementation(compose.desktop.currentOs)
 }
 
@@ -28,8 +30,8 @@ compose.desktop {
         mainClass = "MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "task7"
+            targetFormats(TargetFormat.Exe)
+            packageName = "NonlinearSolver"
             packageVersion = "1.0.0"
         }
     }
