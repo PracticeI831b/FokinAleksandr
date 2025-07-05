@@ -33,6 +33,11 @@ compose.desktop {
             targetFormats(TargetFormat.Exe)
             packageName = "NonlinearSolver"
             packageVersion = "1.0.0"
+
+            windows {
+                iconFile.set(project.file("icons/face.ico"))
+            }
         }
+
     }
 }
