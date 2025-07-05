@@ -1,152 +1,116 @@
+// Roots.kt (исправленная версия)
 package fokin.aleksandr.application.solver
 
-import fokin.aleksandr.application.ui.Equation.f
-import fokin.aleksandr.application.ui.Equation.phi
-import kotlin.math.*
+import fokin.aleksandr.application.ui.Plotter.createPlot
 import org.jetbrains.letsPlot.Figure
-import org.jetbrains.letsPlot.geom.*
-import org.jetbrains.letsPlot.ggsize
-import org.jetbrains.letsPlot.ggplot
-import org.jetbrains.letsPlot.label.ggtitle
-import org.jetbrains.letsPlot.scale.scaleColorManual
+import kotlin.math.*
 
 data class RootResult(
-    val root: Double?,
+    val root: Double,
     val iterations: Int,
-    val fValue: Double?,
-    val initialApproximation: Double,
-    val interval: Pair<Double, Double>?,
-    val plot: Figure?
+    val initialGuess: Double,
+    val fValue: Double,
+    val fullPlot: Figure,
+    val zoomedPlot: Figure
 )
+
+private const val EPS = 0.001
+private const val MAX_ITERATIONS = 5000
 
 fun computeRoots(
     a: String,
     callback: (RootResult?, String) -> Unit
 ) {
     try {
-        val normalizedA = a.replace(',', '.')
-        val aVal = normalizedA.toDoubleOrNull()
-
-        if (aVal == null) {
-            callback(null, "Ошибка: параметр 'a' должен быть числом")
-            return
-        }
+        val aVal = a.replace(',', '.').toDouble()
+        val lowBound = max(0.0, -aVal) + 1e-5
 
         // Поиск интервала с корнем
-        val interval = findRootInterval(aVal)
-        if (interval == null) {
-            callback(null, "Не удалось найти корень в допустимой области")
-            return
-        }
+        val (interval, initialGuess) = findRootInterval(lowBound, aVal)
+            ?: return callback(null, "Корень не найден на интервале [${"%.2f".format(lowBound)}, 100]")
 
-        // Начальное приближение
-        val initial = (interval.first + interval.second) / 2
+        // Уточнение корня методом итераций
+        val (root, iterations) = iterationMethod(initialGuess, aVal)
+            ?: return callback(null, "Метод не сошелся для начального приближения ${"%.4f".format(initialGuess)}")
 
-        // Применение метода итераций
-        val (root, iterations) = iterationMethod(initial, aVal, 0.001, 1000)
+        val fValue = Equation.f(root, aVal) ?: 0.0
 
-        if (root == null) {
-            callback(null, "Метод итераций не сошелся")
-            return
-        }
+        // Динамические границы для общего графика
+        val preXLimit = max(abs(root) * 1.5, abs(initialGuess) * 1.5)
+        val xLimit = max(preXLimit, 10.0)
+        val fullPlot = createPlot(
+            -xLimit,
+            xLimit,
+            aVal,
+            "√(x+$aVal) = 1/x",
+            intervals = listOf(interval),
+            initials = listOf(initialGuess),
+            roots = listOf(root),
+            isZoomed = false
+        )
+        val zoomedPlot = createZoomedPlot(root, aVal, lowBound, interval, initialGuess, root)
 
-        // Построение графика
-        val plot = createPlot(aVal, interval, root)
-
-        callback(RootResult(
-            root = root,
-            iterations = iterations,
-            fValue = f(root, aVal),
-            initialApproximation = initial,
-            interval = interval,
-            plot = plot
-        ), "")
+        callback(RootResult(root, iterations, initialGuess, fValue, fullPlot, zoomedPlot), "")
     } catch (e: Exception) {
         callback(null, "Ошибка: ${e.message}")
     }
 }
 
-private fun findRootInterval(aVal: Double): Pair<Double, Double>? {
-    val step = 0.1
-    var x = 0.1
-    var prevY = f(x, aVal) ?: return null
 
-    // Ищем интервал, где функция меняет знак
-    while (x <= 10.0) {
-        val y = f(x, aVal) ?: return null
-        if (prevY * y <= 0) {
-            return (x - step) to x
-        }
-        prevY = y
-        x += step
+private fun findRootInterval(low: Double, aVal: Double): Pair<Pair<Double, Double>, Double>? {
+    // Учитываем отрицательные значения параметра
+    var x1 = if (aVal < 0) abs(aVal) + 1e-5 else low
+    var x2 = x1 + 1.0
+    var f1 = Equation.f(x1, aVal)
+    var f2 = Equation.f(x2, aVal)
+
+    // Постепенно расширяем интервал
+    while (f1 != null && f2 != null && f1.sign == f2.sign && x2 < 100.0) {
+        x1 = x2
+        x2 += 1.0
+        f1 = f2
+        f2 = Equation.f(x2, aVal)
+    }
+
+    if (f1 == null || f2 == null || f1.sign == f2.sign) return null
+
+    // Начальное приближение - середина интервала
+    val guess = (x1 + x2) / 2
+    return (x1 to x2) to guess
+}
+
+private fun iterationMethod(x0: Double, aVal: Double): Pair<Double, Int>? {
+    var x = x0
+    var iterations = 0
+
+    while (iterations < MAX_ITERATIONS) {
+        val nextX = Equation.phi(x, aVal) ?: return null
+        if (abs(nextX - x) < EPS) return nextX to iterations
+
+        x = nextX
+        iterations++
     }
     return null
 }
 
-private fun iterationMethod(
-    x0: Double,
+private fun createZoomedPlot(
+    root: Double,
     aVal: Double,
-    eps: Double,
-    maxIterations: Int
-): Pair<Double?, Int> {
-    var x = x0
-    var iterations = 0
-    var prevX: Double
-
-    do {
-        prevX = x
-        x = phi(prevX, aVal) ?: return null to 0
-        iterations++
-    } while (abs(x - prevX) > eps && iterations < maxIterations)
-
-    return x to iterations
-}
-
-private fun createPlot(
-    aVal: Double,
+    lowBound: Double,
     interval: Pair<Double, Double>,
-    root: Double
-): Figure? {
-    // Границы графика с расширением
+    initial: Double,
+    iterRoot: Double
+): Figure {
     val padding = 0.5
-    val xMin = max(0.1, interval.first - padding)
-    val xMax = interval.second + padding
-    val points = 200
+    val viewMinX = max(lowBound, root - padding)
+    val viewMaxX = root + padding
 
-    val xValues = mutableListOf<Double>()
-    val yValues = mutableListOf<Double>()
-
-    for (i in 0..points) {
-        val x = xMin + i * (xMax - xMin) / points
-        val y = f(x, aVal)
-        if (y != null) {
-            xValues.add(x)
-            yValues.add(y)
-        }
-    }
-
-    // Точка корня
-    val rootY = f(root, aVal)
-    if (rootY == null) return null
-
-    val rootData = mapOf(
-        "x" to listOf(root),
-        "y" to listOf(rootY),
-        "label" to listOf("Корень")
+    return createPlot(
+        viewMinX, viewMaxX, aVal,
+        "√(x+$aVal) = 1/x (увеличенный вид)",
+        listOf(interval),
+        listOf(initial),
+        listOf(iterRoot),
+        isZoomed = true
     )
-
-    return ggplot() +
-            geomLine(
-                data = mapOf("x" to xValues, "y" to yValues),
-                color = "#2962FF",
-                size = 1.5
-            ) { x = "x"; y = "y" } +
-            geomPoint(
-                data = rootData,
-                color = "#00E5FF",
-                size = 5.0
-            ) { x = "x"; y = "y" } +
-            geomHLine(yintercept = 0.0, color = "white", linetype = "dashed") +
-            ggtitle("f(x) = √(x + $aVal) - 1/x") +
-            ggsize(800, 500)
 }
