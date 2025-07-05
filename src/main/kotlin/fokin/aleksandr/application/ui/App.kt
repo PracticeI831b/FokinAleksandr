@@ -188,7 +188,6 @@ private fun InputPanel(
             ),
             elevation = ButtonDefaults.elevation(8.dp)
         ) {
-            Icon(Icons.Default.Build, contentDescription = "Вычислить")
             Spacer(modifier = Modifier.width(8.dp))
             Text("Найти корни", fontSize = 16.sp)
         }
